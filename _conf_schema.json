@@ -1,0 +1,38 @@
+{
+  "cookie": {
+    "description": "Pixiv Cookie（PHPSESSID）",
+    "type": "string",
+    "default": "",
+    "hint": "登录 pixiv.net 后从浏览器 Cookie 复制 PHPSESSID=...，解析和关注推送都需要。"
+  },
+  "proxy": {
+    "description": "HTTP 代理",
+    "type": "string",
+    "default": "",
+    "hint": "访问 Pixiv 需要代理时填写，例如 http://127.0.0.1:7890"
+  },
+  "push_enabled": {
+    "description": "启用关注新作推送",
+    "type": "bool",
+    "default": false,
+    "hint": "定时拉取当前账号关注列表的最新作品并推送。"
+  },
+  "poll_interval_minutes": {
+    "description": "轮询间隔（分钟）",
+    "type": "int",
+    "default": 30,
+    "slider": {"min": 5, "max": 360, "step": 5}
+  },
+  "push_limit": {
+    "description": "单次最多推送作品数",
+    "type": "int",
+    "default": 3,
+    "slider": {"min": 1, "max": 10, "step": 1}
+  },
+  "max_images": {
+    "description": "每个作品最多发送图片数",
+    "type": "int",
+    "default": 4,
+    "slider": {"min": 1, "max": 10, "step": 1}
+  }
+}
