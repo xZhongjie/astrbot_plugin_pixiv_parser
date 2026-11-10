@@ -204,8 +204,15 @@ class PixivClient:
             if url:
                 pages.append(url)
         if not pages:
+            single = (body.get("meta_single_page") or {}).get("original_image_url")
+            if single:
+                pages.append(str(single))
+        if not pages:
             urls = body.get("image_urls") or {}
-            url = urls.get("original") or urls.get("large")
+            url = urls.get("original")
+            if not url:
+                logger.warning("[pixiv] 没有 original_image_url，回退压缩图")
+                url = urls.get("large")
             if url:
                 pages.append(url)
         tags = []
