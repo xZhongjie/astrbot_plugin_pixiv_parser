@@ -152,6 +152,11 @@ class PixivPlugin(Star):
             str(self.config.get("proxy") or ""),
         )
         self._load_state()
+        logger.info(
+            "[pixiv] 插件已加载：cookie=%s，推送会话=%d",
+            "已配置" if self.config.get("cookie") else "未配置",
+            len(self.sessions),
+        )
         if self.config.get("push_enabled", False) and self.sessions:
             self._push_task = asyncio.create_task(self._push_loop())
 
