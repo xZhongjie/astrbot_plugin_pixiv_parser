@@ -302,10 +302,16 @@ class PixivPlugin(Star):
 
     @filter.command("pixiv_force")
     async def pixiv_force(self, event: AstrMessageEvent):
+        logger.info("[pixiv] force 指令触发")
         if self.client is None:
             await event.send(MessageChain([Plain("插件尚未初始化")]))
             return
-        works = await self.client.follow_latest(1)
+        try:
+            works = await self.client.follow_latest(1)
+        except Exception as exc:
+            logger.warning("[pixiv] force 拉取异常：%s", exc)
+            works = []
+        logger.info("[pixiv] force 拉取到 %d 条，会话 %d 个", len(works or []), len(self.sessions))
         if not works:
             await event.send(MessageChain([Plain("拉取失败：Cookie 无效或网络异常")]))
             return
