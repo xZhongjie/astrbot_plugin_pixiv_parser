@@ -81,6 +81,7 @@ class PixivClient:
         self.refresh_token = str(refresh_token or "").strip()
         self.access_token = ""
         self.token_expiry = 0.0
+        self.last_error = ""
 
     def headers(self) -> dict:
         return {
@@ -111,10 +112,12 @@ class PixivClient:
             ) as resp:
                 payload = await resp.json(content_type=None)
         except Exception as exc:
+            self.last_error = f"oauth 请求失败：{exc}"
             logger.warning("[pixiv] 刷新 access_token 失败：%s", exc)
             return ""
         token = (payload or {}).get("access_token")
         if not token:
+            self.last_error = f"refresh_token 无效：{str(payload)[:200]}"
             logger.warning("[pixiv] refresh_token 无效：%s", str(payload)[:200])
             return ""
         self.access_token = token
@@ -432,7 +435,11 @@ class PixivPlugin(Star):
             return
         works = await self.client.follow_latest(1)
         if not works:
-            await event.send(MessageChain([Plain("检查结果：Cookie 无效或关注列表为空。请检查 PHPSESSID 和代理。")]))
+            if self.client.refresh_token:
+                reason = self.client.last_error or "关注列表为空，或 token 无法换取 access_token"
+                await event.send(MessageChain([Plain(f"检查结果：{reason}")]))
+            else:
+                await event.send(MessageChain([Plain("检查结果：Cookie 无效或关注列表为空。请检查 PHPSESSID 和代理。")]))
             return
         lines = [
             "检查结果：",
