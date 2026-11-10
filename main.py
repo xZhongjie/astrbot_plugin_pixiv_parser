@@ -212,11 +212,14 @@ class PixivClient:
                 tags.append(tag)
             elif isinstance(tag, dict) and tag.get("name"):
                 tags.append(str(tag["name"]))
+        user = body.get("userName") or (body.get("user") or {}).get("name") or ""
+        uid = body.get("userId") or (body.get("user") or {}).get("id") or ""
+        logger.info("[pixiv] illust detail keys=%s user=%s", list(body.keys())[:12], bool(user))
         return Illust(
             pid=str(body.get("id") or pid),
             title=str(body.get("title") or ""),
-            user=str(body.get("userName") or ""),
-            uid=str(body.get("userId") or ""),
+            user=str(user),
+            uid=str(uid),
             tags=tags,
             pages=pages,
         )
