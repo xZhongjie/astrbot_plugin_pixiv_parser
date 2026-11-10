@@ -176,11 +176,12 @@ class PixivClient:
         pages_data = await self.ajax(f"/ajax/illust/{pid}/pages")
         pages = []
         for item in (pages_data or {}).get("body") or []:
-            url = (item or {}).get("urls", {}).get("original")
+            url = ((item or {}).get("urls") or {}).get("original")
             if url:
                 pages.append(url)
         if not pages:
-            original = (body.get("urls") or {}).get("original")
+            urls = body.get("urls") or {}
+            original = urls.get("original") or urls.get("large")
             if original:
                 pages = [original]
         return Illust(
@@ -203,7 +204,8 @@ class PixivClient:
             if url:
                 pages.append(url)
         if not pages:
-            url = (body.get("image_urls") or {}).get("large") or (body.get("image_urls") or {}).get("original")
+            urls = body.get("image_urls") or {}
+            url = urls.get("original") or urls.get("large")
             if url:
                 pages.append(url)
         tags = []
