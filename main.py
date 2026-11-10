@@ -112,7 +112,13 @@ class PixivClient:
             "/ajax/follow_latest/illust", {"p": page, "mode": "all"}
         )
         body = (data or {}).get("body") or {}
-        works = body.get("illusts") or []
+        works = list(body.get("illusts") or [])
+        if not works:
+            for thumb in body.get("thumbnails") or []:
+                if isinstance(thumb, dict) and isinstance(thumb.get("illust"), dict):
+                    works.append(thumb["illust"])
+                elif isinstance(thumb, dict) and thumb.get("illustId"):
+                    works.append(thumb)
         logger.info(
             "[pixiv] follow_latest: error=%s keys=%s count=%d",
             (data or {}).get("error"),
