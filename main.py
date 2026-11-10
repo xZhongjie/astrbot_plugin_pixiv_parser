@@ -266,16 +266,88 @@ class PixivPlugin(Star):
         text = str(args or "").strip()
         pid = text if text.isdigit() else self._extract_pid(text)
         if not pid:
-            await event.send(
-                MessageChain([Plain("用法：/pixiv 12345678 或 pixiv.net/artworks/12345678")])
-            )
+            await event.send(MessageChain([Plain("用法：/pixiv 12345678 或 pixiv.net/artworks/12345678")]))
             return
+        if self.client is None:
+            await event.send(MessageChain([Plain("插件尚未初始化")]))
+            return
+        illust = await self.client.illust(pid)
+        if illust is None:
+            await event.send(MessageChain([Plain(f"解析失败：{pid} 不存在或 Cookie 失效")]))
+            return
+        await event.send(MessageChain(await self.build_chain(illust)))
+
+    @filter.command("pixiv_test")
+    async def pixiv_test(self, event: AstrMessageEvent):
+        if self.client is None:
+            await event.send(MessageChain([Plain("插件尚未初始化")]))
+            return
+        works = await self.client.follow_latest(1)
+        if not works:
+            await event.send(MessageChain([Plain("检查结果：Cookie 无效或关注列表为空。请检查 PHPSESSID 和代理。")]))
+            return
+        lines = [
+            "检查结果：",
+            f"Cookie：有效（follow_latest 返回 {len(works)} 条）",
+            f"推送会话：{len(self.sessions)} 个",
+            f"已记录作品：{len(self.seen)} 个",
+            f"轮询间隔：{self.config.get('poll_interval_minutes') or 30} 分钟",
+            "示例：",
+        ]
+        for work in works[:3]:
+            lines.append(f"- {work.get('illustId')} {work.get('title') or ''}")
+        if not self.sessions:
+            lines.append("还没有绑定会话，发送 /pixiv_push")
+        await event.send(MessageChain([Plain("\n".join(lines))]))
 
     @filter.command("pixiv_force")
     async def pixiv_force(self, event: AstrMessageEvent):
-        """立即强制推送关注列表最新作品，用于验证推送链路。"""
         if self.client is None:
-            await event.send(MessageChain([Plain("\n".join(lines))]))
+            await event.send(MessageChain([Plain("插件尚未初始化")]))
+            return
+        works = await self.client.follow_latest(1)
+        if not works:
+            await event.send(MessageChain([Plain("拉取失败：Cookie 无效或网络异常")]))
+            return
+        if not self.sessions:
+            await event.send(MessageChain([Plain("还没有绑定会话，先发 /pixiv_push")]))
+            return
+        limit = max(1, int(self.config.get("push_limit") or 3))
+        sent = 0
+        for work in works[:limit]:
+            pid = str(work.get("illustId"))
+            illust = await self.client.illust(pid)
+            if illust is None:
+                continue
+            chain = await self.build_chain(illust)
+            for session in list(self.sessions):
+                await self.send_to(session, chain)
+            self.seen.add(pid)
+            sent += 1
+        self._save_state()
+        await event.send(MessageChain([Plain(f"已强制推送 {sent} 个作品到 {len(self.sessions)} 个会话")]))
+
+    @filter.command("pixiv_push")
+    async def pixiv_push(self, event: AstrMessageEvent):
+        umo = event.unified_msg_origin
+        if umo in self.sessions:
+            self.sessions.remove(umo)
+            state = "已关闭"
+        else:
+            self.sessions.append(umo)
+            state = "已开启"
+        self._save_state()
+        await event.send(MessageChain([Plain(f"Pixiv 新作推送{state}（当前 {len(self.sessions)} 个会话）")]))
+
+    @filter.command("pixiv_status")
+    async def pixiv_status(self, event: AstrMessageEvent):
+        lines = [
+            f"Cookie：{'已配置' if self.config.get('cookie') else '未配置'}",
+            f"推送会话：{len(self.sessions)} 个",
+            f"已记录作品：{len(self.seen)} 个",
+            f"轮询间隔：{self.config.get('poll_interval_minutes') or 30} 分钟",
+        ]
+        await event.send(MessageChain([Plain("\n".join(lines))]))
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def auto_parse(self, event: AstrMessageEvent):
