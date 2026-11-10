@@ -347,6 +347,8 @@ class PixivPlugin(Star):
 
     # -- 发送 ---------------------------------------------------------------
     async def build_chain(self, illust: Illust, limit: int | None = None) -> list[Any]:
+        if illust.pages:
+            logger.info("[pixiv] 发送图源：%s", illust.pages[0][:120])
         chain: list[Any] = [
             Plain(
                 f"【Pixiv】{illust.title}\n"
