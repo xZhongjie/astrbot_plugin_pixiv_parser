@@ -113,6 +113,12 @@ class PixivClient:
         )
         body = (data or {}).get("body") or {}
         works = body.get("illusts") or []
+        logger.info(
+            "[pixiv] follow_latest: error=%s keys=%s count=%d",
+            (data or {}).get("error"),
+            list(body.keys())[:6] if isinstance(body, dict) else type(body).__name__,
+            len(works),
+        )
         return [w for w in works if isinstance(w, dict) and w.get("illustId")]
 
     async def image_bytes(self, url: str) -> bytes | None:
