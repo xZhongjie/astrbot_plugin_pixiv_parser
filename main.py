@@ -119,11 +119,15 @@ class PixivClient:
                     works.append(thumb["illust"])
                 elif isinstance(thumb, dict) and thumb.get("illustId"):
                     works.append(thumb)
+        thumbs = body.get("thumbnails") or []
+        first_keys = list(thumbs[0].keys())[:8] if thumbs and isinstance(thumbs[0], dict) else []
         logger.info(
-            "[pixiv] follow_latest: error=%s keys=%s count=%d",
+            "[pixiv] follow_latest: error=%s keys=%s count=%d thumbs=%d first=%s",
             (data or {}).get("error"),
             list(body.keys())[:6] if isinstance(body, dict) else type(body).__name__,
             len(works),
+            len(thumbs),
+            first_keys,
         )
         return [w for w in works if isinstance(w, dict) and w.get("illustId")]
 
