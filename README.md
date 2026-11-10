@@ -10,6 +10,14 @@ Pixiv 解析与关注新作自动推送。
 - `/pixiv_push`：开启/关闭当前会话的新作推送
 - `/pixiv_status`：查看 Cookie、推送会话、已记录作品数
 
+## 两种登录方式
+
+1. **refresh_token（推荐）**：使用 `app-api.pixiv.net`，可拉关注流 `/v2/illust/follow`，不受网页风控影响。
+   获取方式：用 `gppt`（Get PixivPy Token）或 `pixivpy` 的登录流程获取 `refresh_token`，填到配置。
+2. **PHPSESSID**：网页 Cookie，走 `www.pixiv.net/ajax`，容易被风控/403 拦截。
+
+填了 `refresh_token` 时优先走 app-api，忽略 cookie。
+
 ## 新作推送原理
 
 使用 Pixiv 的 `follow_latest` 接口拉取**当前登录账号关注列表**的最新作品：
@@ -22,7 +30,8 @@ Pixiv 解析与关注新作自动推送。
 
 | 键 | 默认 | 说明 |
 | --- | --- | --- |
-| `cookie` | 空 | `PHPSESSID=...`，必须 |
+| `refresh_token` | 空 | 推荐，走 app-api，拉关注流最稳 |
+| `cookie` | 空 | 网页 PHPSESSID，未填 refresh_token 时使用 |
 | `proxy` | 空 | HTTP 代理 |
 | `push_enabled` | false | 启用自动推送 |
 | `poll_interval_minutes` | 30 | 轮询间隔 |
