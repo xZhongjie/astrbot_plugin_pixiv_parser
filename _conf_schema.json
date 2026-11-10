@@ -1,4 +1,10 @@
 {
+  "refresh_token": {
+    "description": "Pixiv refresh_token（推荐）",
+    "type": "string",
+    "default": "",
+    "hint": "用 app-api 时需要；填了它就不再用网页 Cookie。获取方式见 README。"
+  },
   "cookie": {
     "description": "Pixiv Cookie（PHPSESSID）",
     "type": "string",
@@ -21,18 +27,30 @@
     "description": "轮询间隔（分钟）",
     "type": "int",
     "default": 30,
-    "slider": {"min": 5, "max": 360, "step": 5}
+    "slider": {
+      "min": 5,
+      "max": 360,
+      "step": 5
+    }
   },
   "push_limit": {
     "description": "单次最多推送作品数",
     "type": "int",
     "default": 3,
-    "slider": {"min": 1, "max": 10, "step": 1}
+    "slider": {
+      "min": 1,
+      "max": 10,
+      "step": 1
+    }
   },
   "max_images": {
     "description": "每个作品最多发送图片数",
     "type": "int",
     "default": 4,
-    "slider": {"min": 1, "max": 10, "step": 1}
+    "slider": {
+      "min": 1,
+      "max": 10,
+      "step": 1
+    }
   }
 }
