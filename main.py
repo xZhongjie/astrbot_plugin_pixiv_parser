@@ -56,11 +56,31 @@ def normalize_cookie(value: str) -> str:
     return value
 
 
+APP_HEADERS = {
+    "App-OS": "ios",
+    "App-OS-Version": "16.6",
+    "App-Version": "7.16.0",
+    "User-Agent": "PixivIOS/7.16.0 (iOS 16.6; iPhone14,2)",
+    "Accept-Language": "zh-cn",
+}
+APP_CLIENT_ID = "MOBrBDS8blbauoSck0ZfDbtuzpyT"
+APP_CLIENT_SECRET = "lsACyCD94FhDUtGTXi3QzcFE2uU1hqtDaKeqrdwj"
+
+
 class PixivClient:
-    def __init__(self, session: aiohttp.ClientSession, cookie: str, proxy: str) -> None:
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        cookie: str,
+        proxy: str,
+        refresh_token: str = "",
+    ) -> None:
         self.session = session
         self.cookie = normalize_cookie(cookie)
         self.proxy = proxy or None
+        self.refresh_token = str(refresh_token or "").strip()
+        self.access_token = ""
+        self.token_expiry = 0.0
 
     def headers(self) -> dict:
         return {
@@ -69,6 +89,66 @@ class PixivClient:
             "Accept": "application/json, text/plain, */*",
             "Cookie": self.cookie,
         }
+
+    async def _app_token(self) -> str:
+        if self.access_token and time.time() < self.token_expiry:
+            return self.access_token
+        if not self.refresh_token:
+            return ""
+        data = {
+            "client_id": APP_CLIENT_ID,
+            "client_secret": APP_CLIENT_SECRET,
+            "grant_type": "refresh_token",
+            "refresh_token": self.refresh_token,
+            "include_policy": "true",
+        }
+        try:
+            async with self.session.post(
+                "https://oauth.sec.pixiv.net/auth/token",
+                data=data,
+                headers={**APP_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
+                proxy=self.proxy,
+            ) as resp:
+                payload = await resp.json(content_type=None)
+        except Exception as exc:
+            logger.warning("[pixiv] 刷新 access_token 失败：%s", exc)
+            return ""
+        token = (payload or {}).get("access_token")
+        if not token:
+            logger.warning("[pixiv] refresh_token 无效：%s", str(payload)[:200])
+            return ""
+        self.access_token = token
+        self.token_expiry = time.time() + int((payload or {}).get("expires_in") or 3600) - 60
+        logger.info("[pixiv] access_token 刷新成功")
+        return token
+
+    async def app_get(self, path: str, params: dict | None = None) -> Any:
+        token = await self._app_token()
+        if not token:
+            return None
+        try:
+            async with self.session.get(
+                "https://app-api.pixiv.net" + path,
+                params=params,
+                headers={**APP_HEADERS, "Authorization": f"Bearer {token}"},
+                proxy=self.proxy,
+            ) as resp:
+                if resp.status == 401:
+                    self.access_token = ""
+                    token = await self._app_token()
+                    if not token:
+                        return None
+                    async with self.session.get(
+                        "https://app-api.pixiv.net" + path,
+                        params=params,
+                        headers={**APP_HEADERS, "Authorization": f"Bearer {token}"},
+                        proxy=self.proxy,
+                    ) as retry:
+                        return await retry.json(content_type=None)
+                return await resp.json(content_type=None)
+        except Exception as exc:
+            logger.warning("[pixiv] app API 失败：%s", exc)
+            return None
 
     async def ajax(self, path: str, params: dict | None = None) -> Any:
         url = path if path.startswith("http") else f"https://www.pixiv.net{path}"
@@ -84,6 +164,8 @@ class PixivClient:
                 return None
 
     async def illust(self, pid: str) -> Illust | None:
+        if self.refresh_token:
+            return await self.app_illust(pid)
         data = await self.ajax(f"/ajax/illust/{pid}")
         body = (data or {}).get("body")
         if not isinstance(body, dict):
@@ -107,7 +189,43 @@ class PixivClient:
             pages=pages,
         )
 
+    async def app_illust(self, pid: str) -> Illust | None:
+        data = await self.app_get("/v1/illust/detail", {"illust_id": pid})
+        body = (data or {}).get("illust") or {}
+        if not body:
+            return None
+        pages = []
+        for page in body.get("meta_pages") or []:
+            url = (page.get("image_urls") or {}).get("original")
+            if url:
+                pages.append(url)
+        if not pages:
+            url = (body.get("image_urls") or {}).get("large") or (body.get("image_urls") or {}).get("original")
+            if url:
+                pages.append(url)
+        tags = []
+        for tag in body.get("tags") or []:
+            if isinstance(tag, str):
+                tags.append(tag)
+            elif isinstance(tag, dict) and tag.get("name"):
+                tags.append(str(tag["name"]))
+        return Illust(
+            pid=str(body.get("id") or pid),
+            title=str(body.get("title") or ""),
+            user=str(body.get("userName") or ""),
+            uid=str(body.get("userId") or ""),
+            tags=tags,
+            pages=pages,
+        )
+
     async def follow_latest(self, page: int = 1) -> list[dict]:
+        if self.refresh_token:
+            data = await self.app_get("/v2/illust/follow", {"restrict": "all"})
+            body = (data or {}).get("body") if isinstance(data, dict) and "body" in data else (data or {})
+            works = (body or {}).get("illusts") or []
+            logger.info("[pixiv] app follow: count=%d", len(works))
+            return [w for w in works if isinstance(w, dict) and (w.get("id") or w.get("illustId"))]
+
         data = await self.ajax(
             "/ajax/follow_latest/illust", {"p": page, "mode": "all"}
         )
@@ -175,6 +293,7 @@ class PixivPlugin(Star):
             self.session,
             str(self.config.get("cookie") or ""),
             str(self.config.get("proxy") or ""),
+            str(self.config.get("refresh_token") or ""),
         )
         self._load_state()
         logger.info(
@@ -244,6 +363,10 @@ class PixivPlugin(Star):
         except Exception as exc:
             logger.warning("[pixiv] 推送到 %s 失败：%s", session[:30], exc)
 
+    @staticmethod
+    def _work_id(work: dict) -> str:
+        return str(work.get("id") or work.get("illustId") or "")
+
     # -- 自动推送 -----------------------------------------------------------
     async def _push_loop(self) -> None:
         interval = max(1, int(self.config.get("poll_interval_minutes") or 30)) * 60
@@ -264,7 +387,7 @@ class PixivPlugin(Star):
             return
         if not self._baseline_done:
             for work in works:
-                self.seen.add(str(work.get("illustId")))
+                self.seen.add(self._work_id(work))
             self._baseline_done = True
             self._save_state()
             logger.info("[pixiv] 已建立基线，记录 %d 个作品", len(works))
@@ -273,7 +396,7 @@ class PixivPlugin(Star):
         if not new_works:
             return
         for work in reversed(new_works[:limit]):
-            pid = str(work.get("illustId"))
+            pid = self._work_id(work)
             illust = await self.client.illust(pid)
             if illust is None:
                 self.seen.add(pid)
@@ -346,7 +469,7 @@ class PixivPlugin(Star):
         limit = max(1, int(self.config.get("push_limit") or 3))
         sent = 0
         for work in works[:limit]:
-            pid = str(work.get("illustId"))
+            pid = self._work_id(work)
             illust = await self.client.illust(pid)
             if illust is None:
                 continue
