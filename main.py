@@ -47,10 +47,19 @@ class Illust:
         return f"https://www.pixiv.net/artworks/{self.pid}"
 
 
+def normalize_cookie(value: str) -> str:
+    value = str(value or "").strip().strip('"').strip("'")
+    if not value:
+        return ""
+    if "=" not in value:
+        return "PHPSESSID=" + value
+    return value
+
+
 class PixivClient:
     def __init__(self, session: aiohttp.ClientSession, cookie: str, proxy: str) -> None:
         self.session = session
-        self.cookie = cookie
+        self.cookie = normalize_cookie(cookie)
         self.proxy = proxy or None
 
     def headers(self) -> dict:
