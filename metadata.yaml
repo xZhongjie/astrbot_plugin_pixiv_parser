@@ -2,7 +2,7 @@ name: astrbot_plugin_pixiv_parser
 display_name: Pixiv 解析
 desc: 解析 Pixiv 作品 pid/链接并发送图片；定时拉取当前账号关注列表的最新作品，自动推送到已绑定会话。
 short_desc: Pixiv 解析与关注新作推送
-version: v1.0.0
+version: v1.0.1
 author: xZhongjie
 repo: https://github.com/xZhongjie/astrbot_plugin_pixiv_parser
 astrbot_version: ">=4.10.4"
@@ -12,3 +12,4 @@ support_platforms:
   - discord
   - kook
   - webchat
+
