@@ -105,7 +105,7 @@ class PixivClient:
         }
         try:
             async with self.session.post(
-                "https://oauth.sec.pixiv.net/auth/token",
+                "https://oauth.secure.pixiv.net/auth/token",
                 data=data,
                 headers={**APP_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
                 proxy=self.proxy,
