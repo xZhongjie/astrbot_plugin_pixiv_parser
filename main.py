@@ -409,9 +409,10 @@ class PixivPlugin(Star):
             self._save_state()
             logger.info("[pixiv] 已建立基线，记录 %d 个作品", len(works))
             return
-        new_works = [w for w in works if str(w.get("illustId")) not in self.seen]
+        new_works = [w for w in works if self._work_id(w) not in self.seen]
         if not new_works:
             return
+        limit = max(1, int(self.config.get("push_limit") or 3))
         for work in reversed(new_works[:limit]):
             pid = self._work_id(work)
             illust = await self.client.illust(pid)
