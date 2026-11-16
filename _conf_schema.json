@@ -40,9 +40,10 @@
     "default": 3,
     "slider": {
       "min": 1,
-      "max": 10,
+      "max": 512,
       "step": 1
-    }
+    },
+    "hint": "单轮最多实际推送的作品数，1-512；达到上限后其余作品下轮再补"
   },
   "max_images": {
     "description": "每个作品最多发送图片数",
