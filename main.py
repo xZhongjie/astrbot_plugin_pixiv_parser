@@ -293,6 +293,8 @@ class PixivPlugin(Star):
         self.sessions: list[str] = []
         self._push_task: asyncio.Task | None = None
         self._baseline_done = False
+        self.baselined_authors: set[str] = set()
+        self.author_offset = 0
 
     async def initialize(self) -> None:
         self.data_dir = StarTools.get_data_dir(PLUGIN_NAME)
@@ -341,8 +343,9 @@ class PixivPlugin(Star):
             self.seen = set(str(x) for x in data.get("seen", []))
             self.sessions = [str(x) for x in data.get("sessions", [])]
             if self.seen:
-                # seen 已持久化，说明之前建立过基线，重启后不再重新建立
                 self._baseline_done = True
+            self.baselined_authors = set(str(x) for x in data.get("baselined_authors", []))
+            self.author_offset = int(data.get("author_offset") or 0)
         except Exception:
             logger.warning("[pixiv] 读取 state.json 失败")
 
@@ -350,7 +353,12 @@ class PixivPlugin(Star):
         if self.data_dir is None:
             return
         try:
-            payload = {"seen": list(self.seen)[-5000:], "sessions": self.sessions}
+            payload = {
+                "seen": list(self.seen)[-5000:],
+                "sessions": self.sessions,
+                "baselined_authors": list(self.baselined_authors),
+                "author_offset": self.author_offset,
+            }
             self._state_file().write_text(
                 json.dumps(payload, ensure_ascii=False), encoding="utf-8"
             )
@@ -442,9 +450,13 @@ class PixivPlugin(Star):
             return
         limit = max(1, int(self.config.get("push_limit") or 3))
         pushed = 0
-        for uid in uids:
+        checked = 0
+        start = self.author_offset % len(uids)
+        ordered = uids[start:] + uids[:start]
+        for uid in ordered:
             if pushed >= limit:
                 break
+            checked += 1
             data = await self.client.app_get(
                 "/v1/user/illusts",
                 {"user_id": uid, "type": "illust", "filter": "for_ios"},
@@ -452,6 +464,14 @@ class PixivPlugin(Star):
             body = (data or {}).get("body") if isinstance(data, dict) and "body" in data else (data or {})
             works = (body or {}).get("illusts") or []
             logger.info("[pixiv] 作者 %s: %d 条作品", uid, len(works))
+            if uid not in self.baselined_authors:
+                for work in works[:5]:
+                    wid = self._work_id(work)
+                    if wid:
+                        self.seen.add(wid)
+                self.baselined_authors.add(uid)
+                logger.info("[pixiv] 作者 %s 首次检查，已记录 %d 条", uid, len(works[:5]))
+                continue
             for work in works[:3]:
                 if pushed >= limit:
                     break
@@ -467,6 +487,7 @@ class PixivPlugin(Star):
                 self.seen.add(pid)
                 pushed += 1
                 logger.info("[pixiv] 已推送作者新作 %s", pid)
+        self.author_offset = (start + checked) % max(1, len(uids))
         self._save_state()
 
 
