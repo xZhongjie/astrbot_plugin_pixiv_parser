@@ -399,6 +399,33 @@ class PixivPlugin(Star):
                 logger.warning("[pixiv] 推送轮询异常：%s", exc)
             await asyncio.sleep(interval)
 
+    async def _poll_authors(self) -> None:
+        raw = str(self.config.get("extra_uids") or "")
+        uids = [x for x in re.split(r"[,\s]+", raw) if x.isdigit()]
+        if not uids or self.client is None:
+            return
+        for uid in uids:
+            data = await self.client.app_get(
+                "/v1/user/illusts",
+                {"user_id": uid, "type": "illust", "filter": "for_ios"},
+            )
+            body = (data or {}).get("body") if isinstance(data, dict) and "body" in data else (data or {})
+            works = (body or {}).get("illusts") or []
+            logger.info("[pixiv] 作者 %s: %d 条作品", uid, len(works))
+            for work in works[:3]:
+                pid = self._work_id(work)
+                if not pid or pid in self.seen:
+                    continue
+                illust = await self.client.illust(pid)
+                if illust is None:
+                    continue
+                chain = await self.build_chain(illust)
+                for session in list(self.sessions):
+                    await self.send_to(session, chain)
+                self.seen.add(pid)
+                logger.info("[pixiv] 已推送作者新作 %s", pid)
+        self._save_state()
+
     async def _poll_once(self) -> None:
         if self.client is None:
             return
@@ -411,6 +438,7 @@ class PixivPlugin(Star):
             self._baseline_done = True
             self._save_state()
             logger.info("[pixiv] 已建立基线，记录 %d 个作品", len(works))
+            await self._poll_authors()
             return
         new_works = [w for w in works if self._work_id(w) not in self.seen]
         if not new_works:
@@ -427,6 +455,7 @@ class PixivPlugin(Star):
                 await self.send_to(session, chain)
             self.seen.add(pid)
             logger.info("[pixiv] 已推送新作 %s", pid)
+        await self._poll_authors()
         self._save_state()
 
     # -- 指令 ---------------------------------------------------------------
@@ -505,6 +534,23 @@ class PixivPlugin(Star):
             sent += 1
         self._save_state()
         await event.send(MessageChain([Plain(f"已强制推送 {sent} 个作品到 {len(self.sessions)} 个会话")]))
+
+    @filter.command("pixiv_follow")
+    async def pixiv_follow(self, event: AstrMessageEvent, args: GreedyStr):
+        uid = str(args or "").strip()
+        if not uid.isdigit():
+            await event.send(MessageChain([Plain("用法：/pixiv_follow <画师uid>")]))
+            return
+        raw = str(self.config.get("extra_uids") or "")
+        uids = [x for x in re.split(r"[,\s]+", raw) if x.isdigit()]
+        if uid not in uids:
+            uids.append(uid)
+        self.config["extra_uids"] = ",".join(uids)
+        try:
+            self.config.save_config()
+        except Exception as exc:
+            logger.warning("[pixiv] 保存 extra_uids 失败：%s", exc)
+        await event.send(MessageChain([Plain(f"已添加作者 {uid}，下一轮轮询会检查其最新作品")]))
 
     @filter.command("pixiv_push")
     async def pixiv_push(self, event: AstrMessageEvent):
