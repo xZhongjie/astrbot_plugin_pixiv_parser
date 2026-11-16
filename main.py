@@ -82,6 +82,7 @@ class PixivClient:
         self.access_token = ""
         self.token_expiry = 0.0
         self.last_error = ""
+        self.user_id = ""
 
     def headers(self) -> dict:
         return {
@@ -121,6 +122,7 @@ class PixivClient:
             logger.warning("[pixiv] refresh_token 无效：%s", str(payload)[:200])
             return ""
         self.access_token = token
+        self.user_id = str(((payload or {}).get("user") or {}).get("id") or "")
         self.token_expiry = time.time() + int((payload or {}).get("expires_in") or 3600) - 60
         logger.info("[pixiv] access_token 刷新成功")
         return token
@@ -401,6 +403,8 @@ class PixivPlugin(Star):
 
     async def _following_uids(self) -> list[str]:
         uid = str(self.config.get("pixiv_uid") or "").strip()
+        if not uid.isdigit():
+            uid = str(getattr(self.client, "user_id", "") or "")
         if not uid.isdigit() or self.client is None:
             return []
         data = await self.client.app_get(
