@@ -407,15 +407,30 @@ class PixivPlugin(Star):
             uid = str(getattr(self.client, "user_id", "") or "")
         if not uid.isdigit() or self.client is None:
             return []
-        data = await self.client.app_get(
-            "/v1/user/following",
-            {"user_id": uid, "restrict": "public"},
-        )
-        body = (data or {}).get("body") if isinstance(data, dict) and "body" in data else (data or {})
-        users = (body or {}).get("users") or []
-        uids = [str(u.get("user_id")) for u in users if isinstance(u, dict) and u.get("user_id")]
-        logger.info("[pixiv] 关注列表 %d 人", len(uids))
-        return uids
+        logger.info("[pixiv] 使用 UID=%s 查询关注列表", uid)
+        for restrict in ("all", "public"):
+            data = await self.client.app_get(
+                "/v1/user/following",
+                {"user_id": uid, "restrict": restrict},
+            )
+            body = (data or {}).get("body") if isinstance(data, dict) and "body" in data else (data or {})
+            users = (body or {}).get("users") or []
+            uids = [str(u.get("user_id")) for u in users if isinstance(u, dict) and u.get("user_id")]
+            logger.info("[pixiv] following restrict=%s -> %d 人", restrict, len(uids))
+            if uids:
+                return uids
+        # 网页接口兜底
+        if self.client.cookie:
+            data = await self.client.ajax(
+                f"/ajax/user/{uid}/following",
+                {"offset": 0, "limit": 100, "rest": "show"},
+            )
+            body = (data or {}).get("body") or {}
+            users = body.get("users") or []
+            uids = [str(u.get("userId")) for u in users if isinstance(u, dict) and u.get("userId")]
+            logger.info("[pixiv] web following -> %d 人", len(uids))
+            return uids
+        return []
 
     async def _poll_authors(self) -> None:
         if self.client is None:
