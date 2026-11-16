@@ -469,6 +469,20 @@ class PixivPlugin(Star):
                         self.seen.add(wid)
                 self.baselined_authors.add(uid)
                 logger.info("[pixiv] 作者 %s 首次检查，已记录 %d 条", uid, len(works[:5]))
+                if (
+                    bool(self.config.get("push_on_first_check"))
+                    and works
+                    and pushed < limit
+                    and self.sessions
+                ):
+                    first_pid = self._work_id(works[0])
+                    illust = await self.client.illust(first_pid) if first_pid else None
+                    if illust is not None:
+                        chain = await self.build_chain(illust)
+                        for session in list(self.sessions):
+                            await self.send_to(session, chain)
+                        pushed += 1
+                        logger.info("[pixiv] 首次检查推送最新作 %s", first_pid)
                 continue
             for work in works[:3]:
                 if pushed >= limit:
