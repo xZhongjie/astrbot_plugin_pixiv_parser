@@ -338,6 +338,9 @@ class PixivPlugin(Star):
             data = json.loads(path.read_text(encoding="utf-8"))
             self.seen = set(str(x) for x in data.get("seen", []))
             self.sessions = [str(x) for x in data.get("sessions", [])]
+            if self.seen:
+                # seen 已持久化，说明之前建立过基线，重启后不再重新建立
+                self._baseline_done = True
         except Exception:
             logger.warning("[pixiv] 读取 state.json 失败")
 
