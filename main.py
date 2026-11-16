@@ -399,12 +399,33 @@ class PixivPlugin(Star):
                 logger.warning("[pixiv] 推送轮询异常：%s", exc)
             await asyncio.sleep(interval)
 
+    async def _following_uids(self) -> list[str]:
+        uid = str(self.config.get("pixiv_uid") or "").strip()
+        if not uid.isdigit() or self.client is None:
+            return []
+        data = await self.client.app_get(
+            "/v1/user/following",
+            {"user_id": uid, "restrict": "public"},
+        )
+        body = (data or {}).get("body") if isinstance(data, dict) and "body" in data else (data or {})
+        users = (body or {}).get("users") or []
+        uids = [str(u.get("user_id")) for u in users if isinstance(u, dict) and u.get("user_id")]
+        logger.info("[pixiv] 关注列表 %d 人", len(uids))
+        return uids
+
     async def _poll_authors(self) -> None:
-        raw = str(self.config.get("extra_uids") or "")
-        uids = [x for x in re.split(r"[,\s]+", raw) if x.isdigit()]
-        if not uids or self.client is None:
+        if self.client is None:
             return
+        uids = [x for x in re.split(r"[,\\s]+", str(self.config.get("extra_uids") or "")) if x.isdigit()]
+        if not uids:
+            uids = await self._following_uids()
+        if not uids:
+            return
+        limit = max(1, int(self.config.get("push_limit") or 3))
+        pushed = 0
         for uid in uids:
+            if pushed >= limit:
+                break
             data = await self.client.app_get(
                 "/v1/user/illusts",
                 {"user_id": uid, "type": "illust", "filter": "for_ios"},
@@ -413,6 +434,8 @@ class PixivPlugin(Star):
             works = (body or {}).get("illusts") or []
             logger.info("[pixiv] 作者 %s: %d 条作品", uid, len(works))
             for work in works[:3]:
+                if pushed >= limit:
+                    break
                 pid = self._work_id(work)
                 if not pid or pid in self.seen:
                     continue
@@ -423,8 +446,10 @@ class PixivPlugin(Star):
                 for session in list(self.sessions):
                     await self.send_to(session, chain)
                 self.seen.add(pid)
+                pushed += 1
                 logger.info("[pixiv] 已推送作者新作 %s", pid)
         self._save_state()
+
 
     async def _poll_once(self) -> None:
         if self.client is None:
@@ -534,6 +559,19 @@ class PixivPlugin(Star):
             sent += 1
         self._save_state()
         await event.send(MessageChain([Plain(f"已强制推送 {sent} 个作品到 {len(self.sessions)} 个会话")]))
+
+    @filter.command("pixiv_uid")
+    async def pixiv_uid(self, event: AstrMessageEvent, args: GreedyStr):
+        uid = str(args or "").strip()
+        if not uid.isdigit():
+            await event.send(MessageChain([Plain("用法：/pixiv_uid <你的pixiv数字UID>")]))
+            return
+        self.config["pixiv_uid"] = uid
+        try:
+            self.config.save_config()
+        except Exception as exc:
+            logger.warning("[pixiv] 保存 pixiv_uid 失败：%s", exc)
+        await event.send(MessageChain([Plain(f"已设置你的 Pixiv UID：{uid}，下轮将按关注列表轮询")]))
 
     @filter.command("pixiv_follow")
     async def pixiv_follow(self, event: AstrMessageEvent, args: GreedyStr):
