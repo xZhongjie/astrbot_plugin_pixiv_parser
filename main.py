@@ -469,6 +469,7 @@ class PixivPlugin(Star):
             logger.info("[pixiv] 已建立基线，记录 %d 个作品", len(works))
             await self._poll_authors()
             return
+        await self._poll_authors()
         new_works = [w for w in works if self._work_id(w) not in self.seen]
         if not new_works:
             return
@@ -484,7 +485,6 @@ class PixivPlugin(Star):
                 await self.send_to(session, chain)
             self.seen.add(pid)
             logger.info("[pixiv] 已推送新作 %s", pid)
-        await self._poll_authors()
         self._save_state()
 
     # -- 指令 ---------------------------------------------------------------
