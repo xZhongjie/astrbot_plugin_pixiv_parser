@@ -52,5 +52,11 @@
       "max": 10,
       "step": 1
     }
+  },
+  "extra_uids": {
+    "description": "额外轮询的作者 UID",
+    "type": "string",
+    "default": "",
+    "hint": "逗号分隔。新关注的人如果不在关注动态里，把其 UID 填这里，或用 /pixiv_follow 添加"
   }
 }
