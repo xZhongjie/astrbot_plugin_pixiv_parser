@@ -454,8 +454,6 @@ class PixivPlugin(Star):
         start = self.author_offset % len(uids)
         ordered = uids[start:] + uids[:start]
         for uid in ordered:
-            if pushed >= limit:
-                break
             checked += 1
             data = await self.client.app_get(
                 "/v1/user/illusts",
@@ -474,7 +472,7 @@ class PixivPlugin(Star):
                 continue
             for work in works[:3]:
                 if pushed >= limit:
-                    break
+                    continue
                 pid = self._work_id(work)
                 if not pid or pid in self.seen:
                     continue
@@ -612,6 +610,37 @@ class PixivPlugin(Star):
         except Exception as exc:
             logger.warning("[pixiv] 保存 pixiv_uid 失败：%s", exc)
         await event.send(MessageChain([Plain(f"已设置你的 Pixiv UID：{uid}，下轮将按关注列表轮询")]))
+
+    @filter.command("pixiv_reset")
+    async def pixiv_reset(self, event: AstrMessageEvent, args: GreedyStr):
+        arg = str(args or "").strip()
+        if not arg or arg.lower() == "all":
+            self.seen.clear()
+            self.baselined_authors.clear()
+            self.author_offset = 0
+            self._baseline_done = False
+            self._save_state()
+            await event.send(MessageChain([Plain("已清空全部已记录作品和作者基线，下一轮会重新建立基线（不会推送旧作）")]))
+            return
+        uid = arg
+        if not uid.isdigit():
+            await event.send(MessageChain([Plain("用法：/pixiv_reset all 或 /pixiv_reset <作者uid>")]))
+            return
+        removed = 0
+        if self.client is not None:
+            data = await self.client.app_get(
+                "/v1/user/illusts",
+                {"user_id": uid, "type": "illust", "filter": "for_ios"},
+            )
+            body = (data or {}).get("body") if isinstance(data, dict) and "body" in data else (data or {})
+            for work in (body or {}).get("illusts") or []:
+                wid = self._work_id(work)
+                if wid and wid in self.seen:
+                    self.seen.discard(wid)
+                    removed += 1
+        self.baselined_authors.discard(uid)
+        self._save_state()
+        await event.send(MessageChain([Plain(f"已清除作者 {uid} 的记录（{removed} 条），下轮重新检查")]))
 
     @filter.command("pixiv_follow")
     async def pixiv_follow(self, event: AstrMessageEvent, args: GreedyStr):
