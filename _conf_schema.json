@@ -64,5 +64,11 @@
     "type": "string",
     "default": "",
     "hint": "个人主页 pixiv.net/users/数字；设置后自动按其关注列表逐个作者轮询"
+  },
+  "push_on_first_check": {
+    "description": "首次检查作者时也推送最新一条",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后，每次新增作者/首次建立基线时会额外推送该作者最新 1 个作品"
   }
 }
